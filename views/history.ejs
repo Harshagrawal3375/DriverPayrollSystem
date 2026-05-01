@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment History | <%= driver.name %></title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    .history-container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--green);
+      text-decoration: none;
+      font-size: 14px;
+      margin-bottom: 20px;
+      transition: all 0.3s ease;
+    }
+    .back-btn:hover {
+      text-decoration: underline;
+    }
+    .driver-header {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .driver-header img {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: 2px solid var(--green);
+    }
+    .driver-details h2 {
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .driver-details p {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .salary-info {
+      margin-left: auto;
+      text-align: right;
+    }
+    .salary-info .amount {
+      font-size: 24px;
+      color: var(--green);
+      font-weight: 700;
+    }
+    .salary-info .status {
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      display: inline-block;
+      margin-top: 4px;
+    }
+    .history-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .history-card h3 {
+      color: var(--green);
+      font-size: 16px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 10px;
+    }
+    .payment-list {
+      list-style: none;
+    }
+    .payment-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      transition: all 0.3s ease;
+    }
+    .payment-item:hover {
+      background: rgba(0, 212, 170, 0.05);
+    }
+    .payment-item:last-child {
+      border-bottom: none;
+    }
+    .payment-date {
+      font-size: 13px;
+      color: var(--text);
+    }
+    .payment-amount {
+      font-size: 15px;
+      color: var(--green);
+      font-weight: 600;
+    }
+    .payment-notes {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .summary-section {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .summary-box {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    .summary-box .label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .summary-box .value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .summary-box .value.green {
+      color: var(--green);
+    }
+    .summary-box .value.red {
+      color: #ff6b6b;
+    }
+    .no-history {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div class="brand-text">DRIVER<br><span>PAYROLL</span></div>
+      </div>
+    </header>
+
+    <main class="content">
+      <div class="history-container">
+        <a href="/" class="back-btn">← Back to Drivers</a>
+
+        <div class="driver-header">
+          <img src="<%= driver.profileImage || 'https://api.dicebear.com/7.x/adventurer/svg?seed=Driver' %>" alt="<%= driver.name %>" />
+          <div class="driver-details">
+            <h2><%= driver.name %></h2>
+            <p><%= driver.vehicleNumber || 'No vehicle' %> | <%= driver.phone || 'No phone' %></p>
+          </div>
+          <div class="salary-info">
+            <div class="amount">INR <%= (driver.salary || 0).toLocaleString("en-IN") %></div>
+            <span class="payment-status <%= (driver.paymentStatus || 'pending').toLowerCase() %>"><%= driver.paymentStatus || 'Pending' %></span>
+          </div>
+        </div>
+
+        <div class="summary-section">
+          <div class="summary-box">
+            <div class="label">Last Payment</div>
+            <div class="value">
+              <% if (driver.lastPaymentDate) { %>
+                <%= new Date(driver.lastPaymentDate).toLocaleDateString('en-IN') %>
+              <% } else { %>
+                Never
+              <% } %>
+            </div>
+          </div>
+          <div class="summary-box">
+            <div class="label">Total Paid</div>
+            <div class="value green">INR <%= (driver.paymentHistory || []).reduce((sum, p) => sum + (p.amount || 0), 0).toLocaleString("en-IN") %></div>
+          </div>
+          <div class="summary-box">
+            <div class="label">Pending Months</div>
+            <div class="value <%= (driver.pendingMonths || 0) > 0 ? 'red' : '' %>"><%= driver.pendingMonths || 0 %></div>
+          </div>
+        </div>
+
+        <div class="history-card">
+          <h3>Payment History</h3>
+          <% if (!driver.paymentHistory || driver.paymentHistory.length === 0) { %>
+            <div class="no-history">No payment history yet.</div>
+          <% } else { %>
+            <ul class="payment-list">
+              <% const sortedHistory = [...(driver.paymentHistory || [])].reverse(); %>
+              <% sortedHistory.forEach((payment) => { %>
+                <li class="payment-item">
+                  <div>
+                    <div class="payment-date"><%= new Date(payment.paymentDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) %></div>
+                    <div class="payment-notes"><%= payment.notes || 'Salary payment' %></div>
+                  </div>
+                  <div class="payment-amount">INR <%= (payment.amount || 0).toLocaleString("en-IN") %></div>
+                </li>
+              <% }); %>
+            </ul>
+          <% } %>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (function initThreeJS() {
+      const container = document.getElementById("canvas-container");
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      container.appendChild(renderer.domElement);
+
+      camera.position.z = 30;
+
+      const particlesGeometry = new THREE.BufferGeometry();
+      const particlesCount = 500;
+      const posArray = new Float32Array(particlesCount * 3);
+
+      for (let i = 0; i < particlesCount * 3; i++) {
+        posArray[i] = (Math.random() - 0.5) * 100;
+      }
+
+      particlesGeometry.setAttribute("position", new THREE.BufferAttribute(posArray, 3));
+
+      const particlesMaterial = new THREE.PointsMaterial({
+        size: 0.2,
+        color: 0x00d4aa,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending
+      });
+
+      const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+      scene.add(particlesMesh);
+
+      const spheres = [];
+      const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+
+      for (let i = 0; i < 15; i++) {
+        const sphereMaterial = new THREE.MeshPhongMaterial({
+          color: Math.random() > 0.5 ? 0x00d4aa : 0x7c3aed,
+          transparent: true,
+          opacity: 0.6,
+          shininess: 100,
+          emissive: Math.random() > 0.5 ? 0x00d4aa : 0x7c3aed,
+          emissiveIntensity: 0.3
+        });
+
+        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        sphere.position.set(
+          (Math.random() - 0.5) * 60,
+          (Math.random() - 0.5) * 60,
+          (Math.random() - 0.5) * 40
+        );
+        sphere.scale.setScalar(Math.random() * 2 + 0.5);
+        sphere.userData = {
+          speedX: (Math.random() - 0.5) * 0.02,
+          speedY: (Math.random() - 0.5) * 0.02,
+          speedZ: (Math.random() - 0.5) * 0.02,
+          rotationSpeed: Math.random() * 0.01
+        };
+        spheres.push(sphere);
+        scene.add(sphere);
+      }
+
+      const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+      scene.add(ambientLight);
+
+      const pointLight1 = new THREE.PointLight(0x00d4aa, 1, 100);
+      pointLight1.position.set(10, 10, 10);
+      scene.add(pointLight1);
+
+      const pointLight2 = new THREE.PointLight(0x7c3aed, 1, 100);
+      pointLight2.position.set(-10, -10, 10);
+      scene.add(pointLight2);
+
+      let mouseX = 0;
+      let mouseY = 0;
+
+      document.addEventListener("mousemove", (event) => {
+        mouseX = event.clientX / window.innerWidth - 0.5;
+        mouseY = event.clientY / window.innerHeight - 0.5;
+      });
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        particlesMesh.rotation.y += 0.0005;
+        particlesMesh.rotation.x += 0.0002;
+
+        spheres.forEach(sphere => {
+          sphere.position.x += sphere.userData.speedX;
+          sphere.position.y += sphere.userData.speedY;
+          sphere.position.z += sphere.userData.speedZ;
+          sphere.rotation.y += sphere.userData.rotationSpeed;
+          sphere.rotation.x += sphere.userData.rotationSpeed * 0.5;
+
+          if (Math.abs(sphere.position.x) > 30) sphere.userData.speedX *= -1;
+          if (Math.abs(sphere.position.y) > 30) sphere.userData.speedY *= -1;
+          if (Math.abs(sphere.position.z) > 20) sphere.userData.speedZ *= -1;
+        });
+
+        camera.position.x += (mouseX * 5 - camera.position.x) * 0.02;
+        camera.position.y += (-mouseY * 5 - camera.position.y) * 0.02;
+        camera.lookAt(scene.position);
+
+        renderer.render(scene, camera);
+      }
+
+      animate();
+
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    })();
+  </script>
+</body>
+</html>

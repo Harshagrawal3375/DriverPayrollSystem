@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Driver Payroll | 3D Interactive</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div class="brand-text">DRIVER<br><span>PAYROLL</span></div>
+      </div>
+      <div class="header-stats">
+        <div class="stat-box">
+          <span class="stat-label">Total Drivers</span>
+          <span class="stat-value"><%= drivers ? drivers.length : 0 %></span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">Total Salary</span>
+          <span class="stat-value">INR <%= drivers ? drivers.reduce((sum, d) => sum + (d.salary || 0), 0).toLocaleString("en-IN") : 0 %></span>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <div class="toolbar">
+        <h1>Driver Details</h1>
+        <div class="toolbar-actions">
+          <div class="search-wrap">
+            <span class="search-icon">&#128269;</span>
+            <input id="searchInput" type="text" placeholder="" />
+          </div>
+          <button class="add-btn" id="openFormBtn" type="button"><span class="plus-mark">+</span> Add Driver</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Driver</th>
+              <th>Phone</th>
+              <th>Vehicle No.</th>
+              <th>Salary</th>
+              <th>Last Payment</th>
+              <th>Payment Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="driverTableBody">
+            <% if (!drivers || drivers.length === 0) { %>
+              <tr>
+                <td class="empty-row" colspan="7">No driver found.</td>
+              </tr>
+            <% } %>
+
+            <% drivers.forEach((driver) => { %>
+              <% const basic = Number(driver.salary || 0); %>
+              <% const tax = basic * 0.10; %>
+              <% const netSalary = basic - tax; %>
+              <% const departments = Array.isArray(driver.departments) && driver.departments.length ? driver.departments : (driver.department ? [driver.department] : []); %>
+              <tr data-name="<%= (driver.name || '').toLowerCase() %>">
+                <td>
+                  <div class="name-cell">
+                    <img class="avatar" src="<%= driver.profileImage || 'https://api.dicebear.com/7.x/adventurer/svg?seed=Driver' %>" alt="<%= driver.name %>" />
+                    <div class="driver-info">
+                      <span class="driver-name"><%= driver.name %></span>
+                      <span class="driver-license"><%= driver.licenseNumber || 'No License' %></span>
+                    </div>
+                  </div>
+                </td>
+                <td><%= driver.phone || '-' %></td>
+                <td><span class="vehicle-badge"><%= driver.vehicleNumber || '-' %></span></td>
+                <td>
+                  <div>INR <%= basic.toLocaleString("en-IN") %></div>
+                  <div class="salary-meta">Tax INR <%= tax.toLocaleString("en-IN") %> | Net INR <%= netSalary.toLocaleString("en-IN") %></div>
+                </td>
+                <td>
+                  <% if (driver.lastPaymentDate) { %>
+                    <div class="last-payment">
+                      <span class="payment-date"><%= new Date(driver.lastPaymentDate).toLocaleDateString('en-IN') %></span>
+                      <% if (driver.pendingMonths && driver.pendingMonths > 0) { %>
+                        <span class="pending-badge"><%= driver.pendingMonths %> month pending</span>
+                      <% } %>
+                    </div>
+                  <% } else { %>
+                    <span class="no-payment">No payment yet</span>
+                  <% } %>
+                  <a href="/history/<%= driver._id %>" class="history-link">View History</a>
+                </td>
+                <td>
+                  <span class="payment-status <%= driver.paymentStatus ? driver.paymentStatus.toLowerCase() : 'pending' %>">
+                    <%= driver.paymentStatus || 'Pending' %>
+                  </span>
+                </td>
+                <td>
+                  <% if (driver.paymentStatus === 'Paid') { %>
+                    <form action="/payment/<%= driver._id %>" method="POST" class="payment-form">
+                      <input type="hidden" name="status" value="Pending" />
+                      <button type="submit" class="action-btn payment-btn unpaid-btn">Unpaid</button>
+                    </form>
+                  <% } else { %>
+                    <button type="button" class="action-btn payment-btn pay-btn" data-id="<%= driver._id %>" data-name="<%= driver.name %>" data-salary="<%= driver.salary %>">Pay</button>
+                  <% } %>
+                  <a class="action-btn delete-link" href="/delete/<%= driver._id %>" onclick="return confirm('Delete this driver?')">Del</a>
+                  <button class="action-btn" type="button" onclick="startEdit('<%= driver._id %>')">Edit</button>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal" id="formModal">
+    <div class="form-card">
+      <h2 class="form-title" id="formTitle">Add New Driver</h2>
+
+      <% if (formError) { %>
+        <div class="error-box"><%= formError %></div>
+      <% } %>
+
+      <form id="driverForm" action="/add" method="post">
+        <div class="form-row">
+          <label for="name">Driver Name</label>
+          <input class="input" id="name" name="name" type="text" required />
+        </div>
+
+        <div class="form-row">
+          <label for="phone">Phone Number</label>
+          <input class="input" id="phone" name="phone" type="tel" />
+        </div>
+
+        <div class="form-row">
+          <label for="vehicleNumber">Vehicle Number</label>
+          <input class="input" id="vehicleNumber" name="vehicleNumber" type="text" placeholder="e.g. RJ14 1234" />
+        </div>
+
+        <div class="form-row">
+          <label for="licenseNumber">License Number</label>
+          <input class="input" id="licenseNumber" name="licenseNumber" type="text" />
+        </div>
+
+        <div class="form-row">
+          <label>Profile Photo</label>
+          <div class="avatar-options">
+            <label><input type="radio" name="profileImage" value="https://api.dicebear.com/7.x/adventurer/svg?seed=Riya" required /><img src="https://api.dicebear.com/7.x/adventurer/svg?seed=Riya" alt="Riya" /></label>
+            <label><input type="radio" name="profileImage" value="https://api.dicebear.com/7.x/adventurer/svg?seed=Karan" /><img src="https://api.dicebear.com/7.x/adventurer/svg?seed=Karan" alt="Karan" /></label>
+            <label><input type="radio" name="profileImage" value="https://api.dicebear.com/7.x/adventurer/svg?seed=Meera" /><img src="https://api.dicebear.com/7.x/adventurer/svg?seed=Meera" alt="Meera" /></label>
+            <label><input type="radio" name="profileImage" value="https://api.dicebear.com/7.x/adventurer/svg?seed=Arjun" /><img src="https://api.dicebear.com/7.x/adventurer/svg?seed=Arjun" alt="Arjun" /></label>
+            <label><input type="radio" name="profileImage" value="https://api.dicebear.com/7.x/adventurer/svg?seed=Rohan" /><img src="https://api.dicebear.com/7.x/adventurer/svg?seed=Rohan" alt="Rohan" /></label>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>Gender</label>
+          <div class="option-group">
+            <label><input type="radio" name="gender" value="Male" required /> Male</label>
+            <label><input type="radio" name="gender" value="Female" /> Female</label>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>Shift/Route</label>
+          <div class="option-group">
+            <label><input type="checkbox" name="departments" value="Morning" /> Morning</label>
+            <label><input type="checkbox" name="departments" value="Evening" /> Evening</label>
+            <label><input type="checkbox" name="departments" value="Night" /> Night</label>
+            <label><input type="checkbox" name="departments" value="Full Day" /> Full Day</label>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label for="salary">Monthly Salary</label>
+          <select class="select" id="salary" name="salary" required>
+            <option value="">Select Salary</option>
+            <option value="10000">10000</option>
+            <option value="15000">15000</option>
+            <option value="20000">20000</option>
+            <option value="25000">25000</option>
+            <option value="30000">30000</option>
+            <option value="35000">35000</option>
+            <option value="40000">40000</option>
+            <option value="50000">50000</option>
+            <option value="60000">60000</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label>Start Date</label>
+          <div class="date-selects">
+            <select class="select" id="startDay" name="startDay" required></select>
+            <select class="select" id="startMonth" name="startMonth" required></select>
+            <select class="select" id="startYear" name="startYear" required></select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label for="notes">Notes</label>
+          <textarea class="textarea" id="notes" name="notes"></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn" type="button" id="cancelBtn">Cancel</button>
+          <div class="btn-cluster">
+            <button class="btn" type="submit" id="submitBtn">Submit</button>
+            <button class="btn" type="reset" id="resetBtn">Reset</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="paymentModal">
+    <div class="form-card payment-card">
+      <div class="payment-icon">
+        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+          <path d="M9 12l2 2 4-4"/>
+        </svg>
+      </div>
+      <h2 class="form-title">Payment Confirmation</h2>
+      <div class="payment-details">
+        <p class="payment-driver-name" id="paymentDriverName">-</p>
+        <p class="payment-amount">INR <span id="paymentAmount">0</span></p>
+      </div>
+      <p class="payment-question">Did you pay the driver?</p>
+      <div class="payment-options">
+        <button type="button" class="btn payment-yes-btn" onclick="processPayment(true)">Yes, Paid</button>
+        <button type="button" class="btn payment-no-btn" onclick="processPayment(false)">No, Pending</button>
+      </div>
+      <button type="button" class="btn link-btn payment-cancel" onclick="closePaymentModal()">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    const drivers = <%- JSON.stringify(drivers || []) %>;
+    const formData = <%- JSON.stringify(formData || null) %>;
+    const editingId = <%- JSON.stringify(editingId || null) %>;
+
+    const tableBody = document.getElementById("driverTableBody");
+    const formModal = document.getElementById("formModal");
+    const form = document.getElementById("driverForm");
+    const openFormBtn = document.getElementById("openFormBtn");
+    const cancelBtn = document.getElementById("cancelBtn");
+    const submitBtn = document.getElementById("submitBtn");
+    const formTitle = document.getElementById("formTitle");
+    const searchInput = document.getElementById("searchInput");
+    const searchWrap = document.querySelector(".search-wrap");
+
+    function fillDateSelects() {
+      const day = document.getElementById("startDay");
+      const month = document.getElementById("startMonth");
+      const year = document.getElementById("startYear");
+
+      day.innerHTML = '<option value="">Day</option>';
+      for (let i = 1; i <= 31; i += 1) {
+        day.innerHTML += `<option value="${i}">${i}</option>`;
+      }
+
+      month.innerHTML = '<option value="">Month</option>';
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      months.forEach((m, i) => {
+        month.innerHTML += `<option value="${i + 1}">${m}</option>`;
+      });
+
+      year.innerHTML = '<option value="">Year</option>';
+      const currentYear = new Date().getFullYear();
+      for (let y = currentYear + 1; y >= currentYear - 30; y -= 1) {
+        year.innerHTML += `<option value="${y}">${y}</option>`;
+      }
+
+      function daysInMonth(selectedYear, selectedMonth) {
+        if (!selectedYear || !selectedMonth) return 31;
+        return new Date(selectedYear, selectedMonth, 0).getDate();
+      }
+
+      function refreshDays() {
+        const selectedDay = Number(day.value || 0);
+        const selectedMonth = Number(month.value || 0);
+        const selectedYear = Number(year.value || 0);
+        const maxDays = daysInMonth(selectedYear, selectedMonth);
+
+        day.innerHTML = '<option value="">Day</option>';
+        for (let i = 1; i <= maxDays; i += 1) {
+          day.innerHTML += `<option value="${i}">${i}</option>`;
+        }
+
+        if (selectedDay && selectedDay <= maxDays) {
+          day.value = String(selectedDay);
+        }
+      }
+
+      month.addEventListener("change", refreshDays);
+      year.addEventListener("change", refreshDays);
+    }
+
+    function openForm() {
+      formModal.classList.add("open");
+    }
+
+    function closeForm() {
+      formModal.classList.remove("open");
+      form.reset();
+      form.action = "/add";
+      formTitle.textContent = "Add New Driver";
+      submitBtn.textContent = "Submit";
+    }
+
+    function setFormValues(driver) {
+      if (!driver) return;
+
+      document.getElementById("name").value = driver.name || "";
+      document.getElementById("phone").value = driver.phone || "";
+      document.getElementById("vehicleNumber").value = driver.vehicleNumber || "";
+      document.getElementById("licenseNumber").value = driver.licenseNumber || "";
+      document.getElementById("salary").value = String(driver.salary || driver.basicSalary || "");
+      document.getElementById("notes").value = driver.notes || "";
+
+      form.querySelectorAll('input[name="gender"]').forEach((node) => {
+        node.checked = node.value === (driver.gender || "");
+      });
+
+      form.querySelectorAll('input[name="profileImage"]').forEach((node) => {
+        node.checked = node.value === (driver.profileImage || "");
+      });
+
+      const departments = Array.isArray(driver.departments)
+        ? driver.departments
+        : typeof driver.departments === "string"
+          ? [driver.departments]
+          : typeof driver.department === "string" && driver.department
+            ? [driver.department]
+            : [];
+
+      form.querySelectorAll('input[name="departments"]').forEach((node) => {
+        node.checked = departments.includes(node.value);
+      });
+
+      if (driver.startDate) {
+        const dateObj = new Date(driver.startDate);
+        if (!Number.isNaN(dateObj.getTime())) {
+          document.getElementById("startDay").value = String(dateObj.getDate());
+          document.getElementById("startMonth").value = String(dateObj.getMonth() + 1);
+          document.getElementById("startYear").value = String(dateObj.getFullYear());
+        }
+      }
+    }
+
+    window.startEdit = function startEdit(id) {
+      const driver = drivers.find((item) => String(item._id) === String(id));
+      if (!driver) return;
+
+      form.action = `/edit/${driver._id}`;
+      formTitle.textContent = "Edit Driver";
+      submitBtn.textContent = "Update";
+
+      form.reset();
+      setFormValues(driver);
+      openForm();
+    };
+
+    openFormBtn.addEventListener("click", () => {
+      form.action = "/add";
+      formTitle.textContent = "Add New Driver";
+      submitBtn.textContent = "Submit";
+      form.reset();
+      openForm();
+    });
+
+    cancelBtn.addEventListener("click", closeForm);
+
+    formModal.addEventListener("click", (event) => {
+      if (event.target === formModal) {
+        closeForm();
+      }
+    });
+
+    searchInput.addEventListener("input", (event) => {
+      const query = String(event.target.value || "").toLowerCase();
+      searchWrap.classList.toggle("active", query.length > 0 || document.activeElement === searchInput);
+      const rows = tableBody.querySelectorAll("tr[data-name]");
+      let visible = 0;
+
+      rows.forEach((row) => {
+        const name = row.getAttribute("data-name") || "";
+        const show = name.includes(query);
+        row.style.display = show ? "" : "none";
+        if (show) visible += 1;
+      });
+
+      const emptyRow = tableBody.querySelector(".empty-row")?.parentElement;
+      if (emptyRow) {
+        emptyRow.style.display = visible === 0 ? "" : "none";
+      }
+    });
+
+    searchWrap.addEventListener("click", () => {
+      searchWrap.classList.add("active");
+      searchInput.focus();
+    });
+
+    searchInput.addEventListener("blur", () => {
+      if (!searchInput.value.trim()) {
+        searchWrap.classList.remove("active");
+      }
+    });
+
+    fillDateSelects();
+
+    let currentPaymentDriverId = null;
+    const paymentModal = document.getElementById('paymentModal');
+
+    document.querySelectorAll('.pay-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        currentPaymentDriverId = this.dataset.id;
+        document.getElementById('paymentDriverName').textContent = this.dataset.name;
+        document.getElementById('paymentAmount').textContent = parseFloat(this.dataset.salary).toLocaleString('en-IN');
+        paymentModal.classList.add('open');
+      });
+    });
+
+    window.closePaymentModal = function() {
+      paymentModal.classList.remove('open');
+      currentPaymentDriverId = null;
+    };
+
+    window.processPayment = function(isPaid) {
+      if (!currentPaymentDriverId) return;
+      
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = `/payment/${currentPaymentDriverId}`;
+      
+      const statusInput = document.createElement('input');
+      statusInput.type = 'hidden';
+      statusInput.name = 'status';
+      statusInput.value = isPaid ? 'Paid' : 'Pending';
+      
+      form.appendChild(statusInput);
+      document.body.appendChild(form);
+      form.submit();
+    };
+
+    paymentModal.addEventListener('click', (event) => {
+      if (event.target === paymentModal) {
+        closePaymentModal();
+      }
+    });
+
+    if (formData) {
+      if (editingId) {
+        form.action = `/edit/${editingId}`;
+        formTitle.textContent = "Edit Driver";
+        submitBtn.textContent = "Update";
+      }
+      setFormValues(formData);
+      openForm();
+    }
+
+    // Three.js 3D Background
+    (function initThreeJS() {
+      const container = document.getElementById("canvas-container");
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      container.appendChild(renderer.domElement);
+
+      camera.position.z = 30;
+
+      // Create floating particles
+      const particlesGeometry = new THREE.BufferGeometry();
+      const particlesCount = 500;
+      const posArray = new Float32Array(particlesCount * 3);
+
+      for (let i = 0; i < particlesCount * 3; i++) {
+        posArray[i] = (Math.random() - 0.5) * 100;
+      }
+
+      particlesGeometry.setAttribute("position", new THREE.BufferAttribute(posArray, 3));
+
+      const particlesMaterial = new THREE.PointsMaterial({
+        size: 0.2,
+        color: 0x00d4aa,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending
+      });
+
+      const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+      scene.add(particlesMesh);
+
+      // Create glowing spheres
+      const spheres = [];
+      const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+
+      for (let i = 0; i < 15; i++) {
+        const sphereMaterial = new THREE.MeshPhongMaterial({
+          color: Math.random() > 0.5 ? 0x00d4aa : 0x7c3aed,
+          transparent: true,
+          opacity: 0.6,
+          shininess: 100,
+          emissive: Math.random() > 0.5 ? 0x00d4aa : 0x7c3aed,
+          emissiveIntensity: 0.3
+        });
+
+        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        sphere.position.set(
+          (Math.random() - 0.5) * 60,
+          (Math.random() - 0.5) * 60,
+          (Math.random() - 0.5) * 40
+        );
+        sphere.scale.setScalar(Math.random() * 2 + 0.5);
+        sphere.userData = {
+          speedX: (Math.random() - 0.5) * 0.02,
+          speedY: (Math.random() - 0.5) * 0.02,
+          speedZ: (Math.random() - 0.5) * 0.02,
+          rotationSpeed: Math.random() * 0.01
+        };
+        spheres.push(sphere);
+        scene.add(sphere);
+      }
+
+      // Add lights
+      const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+      scene.add(ambientLight);
+
+      const pointLight1 = new THREE.PointLight(0x00d4aa, 1, 100);
+      pointLight1.position.set(10, 10, 10);
+      scene.add(pointLight1);
+
+      const pointLight2 = new THREE.PointLight(0x7c3aed, 1, 100);
+      pointLight2.position.set(-10, -10, 10);
+      scene.add(pointLight2);
+
+      // Animation loop
+      let mouseX = 0;
+      let mouseY = 0;
+
+      document.addEventListener("mousemove", (event) => {
+        mouseX = event.clientX / window.innerWidth - 0.5;
+        mouseY = event.clientY / window.innerHeight - 0.5;
+      });
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        particlesMesh.rotation.y += 0.0005;
+        particlesMesh.rotation.x += 0.0002;
+
+        spheres.forEach(sphere => {
+          sphere.position.x += sphere.userData.speedX;
+          sphere.position.y += sphere.userData.speedY;
+          sphere.position.z += sphere.userData.speedZ;
+          sphere.rotation.y += sphere.userData.rotationSpeed;
+          sphere.rotation.x += sphere.userData.rotationSpeed * 0.5;
+
+          if (Math.abs(sphere.position.x) > 30) sphere.userData.speedX *= -1;
+          if (Math.abs(sphere.position.y) > 30) sphere.userData.speedY *= -1;
+          if (Math.abs(sphere.position.z) > 20) sphere.userData.speedZ *= -1;
+        });
+
+        camera.position.x += (mouseX * 5 - camera.position.x) * 0.02;
+        camera.position.y += (-mouseY * 5 - camera.position.y) * 0.02;
+        camera.lookAt(scene.position);
+
+        renderer.render(scene, camera);
+      }
+
+      animate();
+
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    })();
+  </script>
+</body>
+</html>
